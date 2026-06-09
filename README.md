@@ -47,17 +47,17 @@ The approach leverages a full ML pipeline:
 
 ```mermaid
 flowchart TD
-    A([🗄️ Raw Data\nMarketing Campaign CSV]) --> B[📥 Data Ingestion\nLoad from MongoDB / S3]
-    B --> C[✅ Data Validation\nSchema & Quality Checks]
-    C --> D[🔧 Data Transformation\nFeature Engineering & Scaling]
-    D --> E[🔵 K-Means Clustering\nUnsupervised Segmentation]
-    E --> F[🏷️ Cluster Labels Assigned\nto Each Customer]
-    F --> G[🤖 Model Training\nRandom Forest / Logistic Regression]
-    G --> H[📊 Model Evaluation\nAccuracy, F1, GridSearchCV]
-    H --> I{Model\nAccepted?}
-    I -- ✅ Yes --> J[☁️ Model Pusher\nSave to AWS S3]
-    I -- ❌ No --> G
-    J --> K([🚀 FastAPI Endpoint\nReal-Time Predictions])
+    A(["Raw Data - Marketing Campaign CSV"]) --> B["Data Ingestion - Load from MongoDB and S3"]
+    B --> C["Data Validation - Schema and Quality Checks"]
+    C --> D["Data Transformation - Feature Engineering and Scaling"]
+    D --> E["K-Means Clustering - Unsupervised Segmentation"]
+    E --> F["Cluster Labels Assigned to Each Customer"]
+    F --> G["Model Training - Random Forest or Logistic Regression"]
+    G --> H["Model Evaluation - Accuracy, F1, GridSearchCV"]
+    H --> I{"Model Accepted?"}
+    I -- Yes --> J["Model Pusher - Save to AWS S3"]
+    I -- No --> G
+    J --> K(["FastAPI Endpoint - Real-Time Predictions"])
 
     style A fill:#4A90D9,color:#fff,stroke:#2c5f8a
     style K fill:#27AE60,color:#fff,stroke:#1a7a42
@@ -85,23 +85,23 @@ flowchart LR
     end
 
     subgraph CLUSTERING["🔵 Clustering"]
-        C1[Elbow Method\nOptimal K]
+        C1["Elbow Method - Optimal K"]
         C2[K-Means Fit]
         C3[Assign Cluster Labels]
         C1 --> C2 --> C3
     end
 
     subgraph CLASSIFICATION["🤖 Classification"]
-        D1[Train/Test Split]
-        D2[Random Forest\nLogistic Regression]
-        D3[GridSearchCV\nHyperparameter Tuning]
+        D1["Train and Test Split"]
+        D2["Random Forest or Logistic Regression"]
+        D3["GridSearchCV - Hyperparameter Tuning"]
         D4[Best Model Selected]
         D1 --> D2 --> D3 --> D4
     end
 
     subgraph SERVING["🚀 Serving"]
         E1[FastAPI App]
-        E2[/predict endpoint]
+        E2["/predict endpoint"]
         E3[Customer Cluster Returned]
         E1 --> E2 --> E3
     end
@@ -121,27 +121,27 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    DEV([👨‍💻 Developer\nLocal Machine]) -->|git push| GH[🐙 GitHub Repository]
+    DEV(["Developer - Local Machine"]) -->|git push| GH["GitHub Repository"]
 
-    GH -->|Trigger| CI[⚙️ GitHub Actions\nCI/CD Pipeline]
+    GH -->|Trigger| CI["GitHub Actions - CI/CD Pipeline"]
 
-    CI --> TEST[🧪 Run Tests\n& Linting]
-    TEST -->|Pass| BUILD[🐳 Docker Build\nCreate Image]
-    BUILD --> PUSH[📦 Push Image to\nDocker Registry]
+    CI --> TEST["Run Tests and Linting"]
+    TEST -->|Pass| BUILD["Docker Build - Create Image"]
+    BUILD --> PUSH["Push Image to Docker Registry"]
 
-    PUSH --> DEPLOY{☁️ Cloud\nDeploy}
+    PUSH --> DEPLOY{"Cloud Deploy"}
 
-    DEPLOY --> AWS[🟠 AWS EC2\nProduction Server]
-    DEPLOY --> AZURE[🔵 Azure\nCloud Instance]
+    DEPLOY --> AWS["AWS EC2 - Production Server"]
+    DEPLOY --> AZURE["Azure - Cloud Instance"]
 
-    AWS --> APP([🌐 FastAPI App\nRunning on Port 5000])
+    AWS --> APP(["FastAPI App - Running on Port 5000"])
     AZURE --> APP
 
-    APP -->|Reads Model| S3[🪣 AWS S3\nModel Storage]
-    APP -->|Fetches Data| MONGO[🍃 MongoDB Atlas\nCustomer Database]
-    APP -->|Monitoring| EV[📊 Evidently\nDrift Detection]
+    APP -->|Reads Model| S3["AWS S3 - Model Storage"]
+    APP -->|Fetches Data| MONGO["MongoDB Atlas - Customer Database"]
+    APP -->|Monitoring| EV["Evidently - Drift Detection"]
 
-    USER([📱 End User /\nClient App]) -->|POST /predict| APP
+    USER(["End User or Client App"]) -->|POST predict| APP
     APP -->|Customer Cluster| USER
 
     style DEV fill:#2c3e50,color:#fff
@@ -159,7 +159,7 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    subgraph TRAIN["🏋️ Training Pipeline  /train"]
+    subgraph TRAIN["Training Pipeline - route: /train"]
         T1[Ingest Data] --> T2[Validate] --> T3[Transform]
         T3 --> T4[Cluster with K-Means]
         T4 --> T5[Train Classifier]
@@ -167,7 +167,7 @@ flowchart LR
         T6 --> T7[Push to S3]
     end
 
-    subgraph PREDICT["⚡ Prediction Pipeline  /predict"]
+    subgraph PREDICT["Prediction Pipeline - route: /predict"]
         P1[Receive Customer Input] --> P2[Load Model from S3]
         P2 --> P3[Preprocess Input]
         P3 --> P4[Predict Cluster]
