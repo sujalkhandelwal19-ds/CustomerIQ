@@ -353,5 +353,5 @@ The **CustomerIQ** system is a production-ready ML solution that:
 ---
 
 <div align="center">
-  <b>Built with ❤️ by the team | PW Skills</b>
+  <b>Built with ❤️ by Sujal Khandelwal</b>
 </div>
