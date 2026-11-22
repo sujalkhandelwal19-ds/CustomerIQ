@@ -1,9 +1,15 @@
-FROM python:3.8.5-slim-buster
+FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY . /app
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-RUN pip install -r requirements.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["python3","app.py"]
+COPY . .
+
+EXPOSE 5000
+
+CMD ["python", "app.py"]

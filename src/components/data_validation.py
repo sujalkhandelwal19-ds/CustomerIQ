@@ -1,9 +1,9 @@
 import json
 import sys
-from typing import Tuple, Union
+from typing import Tuple
+import numpy as np
 import pandas as pd
-from evidently.model_profile import Profile
-from evidently.model_profile.sections import DataDriftProfileSection
+from scipy.stats import ks_2samp
 from pandas import DataFrame
 
 from src.entity.artifact_entity import DataIngestionArtifact, DataValidationArtifact
@@ -27,27 +27,16 @@ class DataValidation:
         self._schema_config = self.utils.read_schema_config_file()
 
     def validate_schema_columns(self, dataframe: DataFrame) -> bool:
-        """
-        Method Name :   validate_schema_columns
-        Description :   This method validates the schema columns for the particular dataframe 
-        
-        Output      :   True or False value is returned based on the schema 
-        On Failure  :   Write an exception log and then raise an exception
-        
-        Version     :   1.2
-        Revisions   :   moved setup to cloud
-        """
         try:
-            
-            status = len(dataframe.columns) == len(self._schema_config["columns"])
-            logging.info("Is required column present[{status}]")
-
+            expected = list(self._schema_config["columns"].keys())
+            actual = list(dataframe.columns)
+            status = actual == expected
+            logging.info(f"Schema validation status: {status}")
+            if not status:
+                logging.error(f"Expected columns: {expected}; received: {actual}")
             return status
-
         except Exception as e:
             raise CustomerException(e, sys) from e
-
-   
 
     def validate_dataset_schema_columns(self, train_set, test_set) -> Tuple[bool, bool]:
         """
@@ -85,42 +74,37 @@ class DataValidation:
     
 
     def detect_dataset_drift(
-        self, reference_df: DataFrame, current_df: DataFrame) -> bool:
-        """
-        Method Name :   detect_dataset_drift
-        Description :   This method detects the dataset drift using the reference and production dataframe 
-        
-        Output      :   Returns bool or float value based on the get_ration parameter
-        On Failure  :   Write an exception log and then raise an exception
-        
-        Version     :   1.2
-        Revisions   :   moved setup to cloud
-        """
+        self, reference_df: DataFrame, current_df: DataFrame
+    ) -> bool:
+        """Detect meaningful train/test distribution drift without external reporting libraries."""
         try:
-            data_drift_profile = Profile(sections=[DataDriftProfileSection()])
+            drifted = 0
+            total = len(reference_df.columns)
+            for column in reference_df.columns:
+                ref = reference_df[column].dropna()
+                cur = current_df[column].dropna()
+                if len(ref) == 0 or len(cur) == 0:
+                    continue
+                if pd.api.types.is_numeric_dtype(ref):
+                    p_value = ks_2samp(ref, cur).pvalue
+                else:
+                    ref_dist = ref.value_counts(normalize=True)
+                    cur_dist = cur.value_counts(normalize=True)
+                    categories = set(ref_dist.index).union(cur_dist.index)
+                    distance = sum(
+                        abs(ref_dist.get(cat, 0.0) - cur_dist.get(cat, 0.0))
+                        for cat in categories
+                    ) / 2.0
+                    p_value = 0.0 if distance > 0.30 else 1.0
+                if p_value < 0.05:
+                    drifted += 1
 
-            data_drift_profile.calculate(reference_df, current_df)
-
-            report = data_drift_profile.json()
-
-            json_report = json.loads(report)
-            write_yaml_file(file_path=self.data_validation_config.drift_report_file_path, content=json_report)
-
-
-            n_features = json_report["data_drift"]["data"]["metrics"]["n_features"]
-
-            n_drifted_features = json_report["data_drift"]["data"]["metrics"]["n_drifted_features"]
-            
-            logging.info(f"{n_drifted_features}/{n_features} drift detected.")
-
-            drift_status = json_report["data_drift"]["data"]["metrics"]["dataset_drift"]
-
-            return drift_status
-        
+            drift_ratio = drifted / total if total else 0.0
+            logging.info(f"Dataset drift: {drifted}/{total} features ({drift_ratio:.2%})")
+            return drift_ratio > 0.30
         except Exception as e:
             raise CustomerException(e, sys) from e
-        
-        
+
     @staticmethod
     def read_data(file_path) -> DataFrame:
         try:
