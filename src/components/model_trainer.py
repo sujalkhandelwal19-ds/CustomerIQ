@@ -1,102 +1,107 @@
 import sys
-from typing import List, Tuple
 import os
 from pandas import DataFrame
-import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import f1_score, precision_score, recall_score
 
 from src.entity.config_entity import ModelTrainerConfig
-from src.entity.artifact_entity import DataTransformationArtifact, ModelTrainerArtifact, ClassificationMetricArtifact
-
+from src.entity.artifact_entity import (
+    DataTransformationArtifact,
+    ModelTrainerArtifact,
+    ClassificationMetricArtifact,
+)
 from src.exception import CustomerException
 from src.logger import logging
-from src.utils.main_utils import MainUtils,load_numpy_array_data
-from neuro_mf  import ModelFactory
-
-
-
-
-class CustomerSegmentationModel:
-    def __init__(self, preprocessing_object: object, trained_model_object: object):
-        self.preprocessing_object = preprocessing_object
-
-        self.trained_model_object = trained_model_object
-
-    def predict(self, X: DataFrame) -> DataFrame:
-        logging.info("Entered predict method of srcTruckModel class")
-
-        try:
-            logging.info("Using the trained model to get predictions")
-
-            transformed_feature = self.preprocessing_object.transform(X)
-
-            logging.info("Used the trained model to get predictions")
-
-            return self.trained_model_object.predict(transformed_feature)
-
-        except Exception as e:
-            raise CustomerException(e, sys) from e
-
-    def __repr__(self):
-        return f"{type(self.trained_model_object).__name__}()"
-
-    def __str__(self):
-        return f"{type(self.trained_model_object).__name__}()"
+from src.utils.main_utils import MainUtils, load_numpy_array_data
+from src.ml.model.estimator import CustomerSegmentationModel
 
 
 class ModelTrainer:
-    def __init__(self, 
-                 data_transformation_artifact: DataTransformationArtifact,
-                 model_trainer_config: ModelTrainerConfig):
-        
+    def __init__(
+        self,
+        data_transformation_artifact: DataTransformationArtifact,
+        model_trainer_config: ModelTrainerConfig,
+    ):
         self.data_transformation_artifact = data_transformation_artifact
         self.model_trainer_config = model_trainer_config
         self.utils = MainUtils()
 
-
-    
-
     def initiate_model_trainer(self) -> ModelTrainerArtifact:
-        logging.info("Entered initiate_model_trainer method of ModelTrainer class")
-
+        logging.info("Entered initiate_model_trainer method")
         try:
-            train_arr = load_numpy_array_data(file_path=self.data_transformation_artifact.transformed_train_file_path)
-            test_arr = load_numpy_array_data(file_path=self.data_transformation_artifact.transformed_test_file_path)
-            x_train, y_train, x_test, y_test = train_arr[:, :-1], train_arr[:, -1], test_arr[:, :-1], test_arr[:, -1]
-            
-            
-            model_factory = ModelFactory(model_config_path=self.model_trainer_config.model_config_file_path)
-            best_model_detail = model_factory.get_best_model(X=x_train,y=y_train,base_accuracy=self.model_trainer_config.expected_accuracy)
-            preprocessing_obj = self.utils.load_object(file_path=self.data_transformation_artifact.transformed_object_file_path)
-
-            if best_model_detail.best_score < self.model_trainer_config.expected_accuracy:
-                            logging.info("No best model found with score more than base score")
-                            raise Exception("No best model found with score more than base score")
-             
-            customer_segmentation_model = CustomerSegmentationModel(
-                preprocessing_object=preprocessing_obj,
-                trained_model_object=best_model_detail.best_model
+            train_arr = load_numpy_array_data(
+                self.data_transformation_artifact.transformed_train_file_path
             )
-            logging.info("Customer Segmentation Model is created and saved.")
-            trained_model_path = os.path.dirname(self.model_trainer_config.trained_model_file_path)
-            os.makedirs(trained_model_path, exist_ok=True)
-            
+            test_arr = load_numpy_array_data(
+                self.data_transformation_artifact.transformed_test_file_path
+            )
+
+            x_train, y_train = train_arr[:, :-1], train_arr[:, -1].astype(int)
+            x_test, y_test = test_arr[:, :-1], test_arr[:, -1].astype(int)
+
+            # Hyperparameter tuning is performed only on the training set.
+            model = LogisticRegression(
+                max_iter=1000,
+                multi_class="auto",
+                solver="lbfgs",
+                random_state=42,
+            )
+            param_grid = {
+                "C": [0.01, 0.1, 1.0, 10.0, 100.0],
+            }
+            search = GridSearchCV(
+                model,
+                param_grid=param_grid,
+                scoring="f1_weighted",
+                cv=3,
+                n_jobs=-1,
+            )
+            search.fit(x_train, y_train)
+            best_model = search.best_estimator_
+
+            predictions = best_model.predict(x_test)
+            metrics = ClassificationMetricArtifact(
+                f1_score=float(f1_score(y_test, predictions, average="weighted")),
+                precision_score=float(
+                    precision_score(y_test, predictions, average="weighted", zero_division=0)
+                ),
+                recall_score=float(
+                    recall_score(y_test, predictions, average="weighted", zero_division=0)
+                ),
+            )
+
+            if metrics.f1_score < self.model_trainer_config.expected_accuracy:
+                raise ValueError(
+                    f"Best model F1 score {metrics.f1_score:.4f} is below "
+                    f"required threshold {self.model_trainer_config.expected_accuracy:.4f}"
+                )
+
+            preprocessing_obj = self.utils.load_object(
+                self.data_transformation_artifact.transformed_object_file_path
+            )
+            trained_model = CustomerSegmentationModel(
+                preprocessing_object=preprocessing_obj,
+                trained_model_object=best_model,
+            )
+
+            model_dir = os.path.dirname(self.model_trainer_config.trained_model_file_path)
+            os.makedirs(model_dir, exist_ok=True)
             self.utils.save_object(
                 file_path=self.model_trainer_config.trained_model_file_path,
-                obj=customer_segmentation_model
-            )
-            logging.info(f"Customer Segmentation Model is saved successfully at: {trained_model_path}")
-            metric_artifact = ClassificationMetricArtifact(f1_score=0.8, precision_score=0.8, recall_score=0.9)
-            model_trainer_artifact = ModelTrainerArtifact(
-            trained_model_file_path=self.model_trainer_config.trained_model_file_path,
-            metric_artifact=metric_artifact,
+                obj=trained_model,
             )
 
-            logging.info("Model training completed successfully")
-            logging.info(f"Model trainer artifact: {model_trainer_artifact}")
-
-            return model_trainer_artifact
-
-            
+            artifact = ModelTrainerArtifact(
+                trained_model_file_path=self.model_trainer_config.trained_model_file_path,
+                metric_artifact=metrics,
+            )
+            logging.info(
+                "Model training completed. best_params=%s, metrics=%s",
+                search.best_params_,
+                metrics,
+            )
+            return artifact
 
         except Exception as e:
             raise CustomerException(e, sys) from e
