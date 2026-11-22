@@ -1,167 +1,207 @@
+# CustomerIQ — Customer Segmentation
 
-# Customer Personality Segmentation
+CustomerIQ is an end-to-end customer segmentation system. It ingests customer data from MongoDB, validates the dataset, engineers customer-level features, preprocesses the data, creates customer segments with PCA + K-Means, trains a Logistic Regression classifier to reproduce those segments for new customers, evaluates the model, stores the trained model in AWS S3, and exposes prediction through FastAPI.
 
-## Problem statement
+## Architecture
 
-In this data science project, you will build a machine learning system which will be able predict the personality of the customer using machine learning algorithms. This project will be very usefull for malls, various stores and companies which are product based. Based on customer's personal details and purchase details, we can cluster them and we can predict the customer's cluster number using classification techniques.
+1. **MongoDB** — source customer data.
+2. **Data ingestion** — exports the collection and creates a train/test split.
+3. **Data validation** — checks the exact schema and detects excessive train/test distribution drift.
+4. **Feature engineering** — derives age, children, family-related and spending/promotion features.
+5. **Preprocessing** — imputes missing values, scales standard numeric features, and applies a power transform to skewed spending features.
+6. **Clustering** — PCA and K-Means are fitted **only on the training set**. The fitted K-Means model is then used to assign test-set cluster labels.
+7. **Classification** — Logistic Regression learns to predict the cluster from the original engineered features.
+8. **Evaluation** — weighted F1, precision and recall are calculated on the held-out test set.
+9. **Model registry/storage** — the serialized model can be pushed to AWS S3.
+10. **Prediction API** — FastAPI loads the model from S3 and predicts the customer cluster.
 
-## Solution Proposed
+## Why two ML stages?
 
-Now the question is how to dynamically predict the cluster of the customer ?. One of the approaches which we can use of machine learning approach, where we can cluster the customer based on the details we have and predict the cluster type based on the domain knowledge and leverage previous customer data to predict the cluster.
+K-Means is used to discover customer groups without a pre-existing target label. Once the clusters are created, their cluster IDs become the supervised target for Logistic Regression. This allows the application to predict a segment for a new customer without rerunning K-Means during every API request.
 
-Dataset used
- <html>
-<a href="https://github.com/entbappy/Branching-tutorial/blob/master/marketing_campaign.zip"> Dataset Link</a>
-</html>
+A critical implementation detail is that PCA and K-Means are fitted once on training data and reused for the test set. This prevents the train and test sets from receiving independently learned cluster definitions.
 
+## Features used for prediction
 
+- Age
+- Education
+- Marital Status
+- Parental Status
+- Children
+- Income
+- Total Spending
+- Days as Customer
+- Recency
+- Wines
+- Fruits
+- Meat
+- Fish
+- Sweets
+- Gold
+- Web Purchases
+- Catalog Purchases
+- Store Purchases
+- Discount Purchases
+- Total Promotions
+- Website Visits per Month
 
-## Tech Stack Used
+## Tech stack
 
-1. Python
-2. FastAPI
-3. Machine learning algorithms
-4. Docker
-5. MongoDB
+- Python 3.11
+- FastAPI
+- Pandas / NumPy
+- Scikit-learn
+- MongoDB
+- AWS S3
+- Docker
+- GitHub Actions
 
-## Infrastructure required
+## Local setup
 
-1. AWS S3
-2. Azure
-3. Github Actions
+### 1. Clone
 
-## How to run
-
-Before you run this project make sure you have MongoDB Atlas account and you have the shipping dataset into it.
-
-Step 1. Cloning the repository.
-
+```bash
+git clone https://github.com/sujalkhandelwal19-ds/CustomerIQ.git
+cd CustomerIQ
 ```
 
-git clone https://github.com/Machine-Learning-01/Customer_segmentation.git
+### 2. Create an environment
 
+```bash
+python -m venv .venv
 ```
 
-Step 2. Create a conda environment.
+Windows:
 
+```powershell
+.venv\Scripts\activate
 ```
 
-conda create --prefix venv python=3.7 -y
+Linux/macOS:
 
+```bash
+source .venv/bin/activate
 ```
 
-```
+### 3. Install dependencies
 
-conda activate venv/
-
-```
-
-Step 3. Install the requirements
-
-```
-
+```bash
 pip install -r requirements.txt
-
 ```
 
-Step 4. Export the environment variable
+### 4. Configure environment variables
+
+MongoDB:
+
+```text
+MONGO_DB_URL=<your-mongodb-connection-string>
+```
+
+AWS:
+
+```text
+AWS_ACCESS_KEY_ID=<your-access-key>
+AWS_SECRET_ACCESS_KEY=<your-secret-key>
+AWS_DEFAULT_REGION=ap-south-1
+MODEL_BUCKET_NAME=<your-s3-model-bucket>
+```
+
+Do not commit credentials to Git.
+
+### 5. Start the API
 
 ```bash
-
-export AWS_ACCESS_KEY_ID=<AWS_ACCESS_KEY_ID>
-
-
-export AWS_SECRET_ACCESS_KEY=<AWS_SECRET_ACCESS_KEY>
-
-
-export AWS_DEFAULT_REGION=<AWS_DEFAULT_REGION>
-
-
-export MONGODB_URL= <MONGODB_URL>
-
-
-```
-
-Step 5. Run the application server
-
-```
-
 python app.py
-
 ```
 
-Step 6. Train application
+The API runs on:
+
+```text
+http://localhost:5000
+```
+
+Health check:
+
+```text
+GET /health
+```
+
+Training:
+
+```text
+POST /train
+```
+
+Prediction UI:
+
+```text
+GET /
+POST /
+```
+
+## Docker
+
+Build:
 
 ```bash
-
-http://localhost:5000/train
-
+docker build -t customeriq .
 ```
 
-Step 7. Prediction application
+Run:
 
 ```bash
-
-http://localhost:5000/predict
-
+docker run --rm -p 5000:5000 \
+  -e MONGO_DB_URL="<your-mongodb-url>" \
+  -e AWS_ACCESS_KEY_ID="<your-access-key>" \
+  -e AWS_SECRET_ACCESS_KEY="<your-secret-key>" \
+  -e AWS_DEFAULT_REGION="ap-south-1" \
+  -e MODEL_BUCKET_NAME="<your-bucket>" \
+  customeriq
 ```
 
-## Run locally
+## Model evaluation
 
-1. Check if the Dockerfile is available in the project directory
-2. Build the Docker image
+The classifier is tuned using GridSearchCV on the training set. The held-out test set is used only for final evaluation.
 
+Reported metrics:
+
+- Weighted F1 score
+- Weighted precision
+- Weighted recall
+
+The training pipeline fails when the final weighted F1 score is below the configured minimum threshold.
+
+## Project structure
+
+```text
+CustomerIQ/
+├── app.py
+├── Dockerfile
+├── requirements.txt
+├── config/
+├── src/
+│   ├── components/
+│   ├── configuration/
+│   ├── constant/
+│   ├── data_access/
+│   ├── entity/
+│   ├── ml/
+│   ├── pipeline/
+│   └── utils/
+├── templates/
+├── static/
+└── .github/
 ```
 
-docker build --build-arg AWS_ACCESS_KEY_ID=<AWS_ACCESS_KEY_ID> --build-arg AWS_SECRET_ACCESS_KEY=<AWS_SECRET_ACCESS_KEY> --build-arg AWS_DEFAULT_REGION=<AWS_DEFAULT_REGION> --build-arg MONGODB_URL=<MONGODB_URL> . 
+## Important implementation notes
 
-```
+- The preprocessing object is fitted on training data and reused during prediction.
+- PCA and K-Means are fitted only on training data.
+- Test labels are generated using the training-fitted K-Means model.
+- The classifier is evaluated on untouched test data.
+- Model metrics are calculated from actual predictions; they are not hard-coded.
+- The project no longer depends on the obsolete `neuro_mf` or Evidently development dependency.
 
-3. Run the Docker image
+## License
 
-```
-
-docker run -d -p 5000:5000 <IMAGE_NAME>
-
-```
-
-## Project Architecture -
-
-![WhatsApp Image 2022-09-22 at 15 29 19](https://user-images.githubusercontent.com/71321529/192722336-54016f79-89ef-4c8c-9d71-a6e91ebab03f.jpeg)
-
-## Data Collection Architecture -
-
-![WhatsApp Image 2022-09-22 at 15 29 10](https://user-images.githubusercontent.com/71321529/192721926-de265f9b-f301-4943-ac7d-948bff7be9a0.jpeg)
-
-## Deployment Architecture -
-
-![deployment](https://user-images.githubusercontent.com/104005791/199660875-c8e63457-432a-44cb-8a95-800870f3da15.png)
-
-## Models Used
-
-* [K-Means](https://www.javatpoint.com/k-means-clustering-algorithm-in-machine-learning)
-* [LogisticRegression](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html)
-
-From these above models after hyperparameter optimization we selected these two models which were K-Means for clustering and Logistic Regression for classification and used the following in Pipeline.
-
-* GridSearchCV is used for Hyperparameter Optimization in the pipeline.
-
-## `src` is the main package folder which contains
-
-**Components** : Contains all components of Machine Learning Project
-
-- Data Ingestion
-- Data Validation
-- Data Transformation
-- Data Clustering
-- Model Trainer
-- Model Evaluation
-- Model Pusher
-
-**Custom Logger and Exceptions** are used in the Project for better debugging purposes.
-
-## Conclusion
-
-- This Project can be used in real-life by Users.
-
-
+This project is for educational and portfolio purposes.
