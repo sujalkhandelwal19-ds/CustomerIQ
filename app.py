@@ -28,7 +28,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -84,7 +84,7 @@ class DataForm:
         self.Total_Promo = form.get('Total_Promo')
         self.NumWebVisitsMonth = form.get('NumWebVisitsMonth')
 
-@app.get("/train")
+@app.post("/train")
 async def trainRouteClient():
     try:
         train_pipeline = TrainPipeline()
@@ -96,6 +96,10 @@ async def trainRouteClient():
     except Exception as e:
         return Response(f"Error Occurred! {e}")
 
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 @app.get("/")
 async def predictGetRouteClient(request: Request):
