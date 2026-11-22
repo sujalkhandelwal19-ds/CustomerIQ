@@ -26,3 +26,5 @@ MODEL_TRAINER_EXPECTED_SCORE = 0.60
 MODEL_EVALUATION_CHANGED_THRESHOLD_SCORE = 0.01
 MODEL_PUSHER_BUCKET_NAME = os.getenv("MODEL_BUCKET_NAME", "customer-iq-models")
 TARGET_COLUMN = "cluster"
+
+SCHEMA_FILE_PATH = os.path.join("config", "schema.yaml")
